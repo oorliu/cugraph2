@@ -14,7 +14,8 @@
 import gc
 import pytest
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import TEST_GROUP, set_download_dir
+from pathlib import Path
 import numpy as np
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -36,10 +37,13 @@ def setup_function():
     gc.collect()
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_to_from_pandas(graph_file):
+set_download_dir(Path(__file__).parents[4] / "datasets")
+
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_to_from_pandas(dataset):
     # Read in the graph
-    M = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    M = dataset.get_edgelist().to_pandas()
+    M = M.rename(columns={"src": "0", "dst": "1", "wgt": "weight"})
 
     # create a NetworkX DiGraph and convert to pandas adjacency
     nxG = nx.from_pandas_edgelist(
@@ -83,10 +87,11 @@ def test_to_from_pandas(graph_file):
     assert exp_pdf.equals(res_pdf)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_from_to_numpy(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_from_to_numpy(dataset):
     # Read in the graph
-    M = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    M = dataset.get_edgelist().to_pandas()
+    M = M.rename(columns={"src": "0", "dst": "1", "wgt": "weight"})
 
     # create NetworkX and cugraph DiGraph
     nxG = nx.from_pandas_edgelist(
@@ -151,14 +156,15 @@ def test_from_to_numpy(graph_file):
     assert exp_pdf.equals(res_pdf)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_from_edgelist(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_from_edgelist(dataset):
     """
     Compare the resulting Graph objs from cugraph.from_edgelist() calls of both
     a cudf and pandas DataFrame and ensure the results are equal.
     """
-    df = utils.read_csv_file(graph_file)
-    pdf = utils.read_csv_for_nx(graph_file)
+    df = dataset.get_edgelist()
+    df = df.rename(columns={"src": "0", "dst": "1"})
+    pdf = df.to_pandas()
 
     G1 = cugraph.from_edgelist(df, source="0", destination="1")
     G2 = cugraph.from_edgelist(pdf, source="0", destination="1")
@@ -166,13 +172,13 @@ def test_from_edgelist(graph_file):
     assert G1.EdgeList == G2.EdgeList
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_from_adjlist(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_from_adjlist(dataset):
     """
     Compare the resulting Graph objs from cugraph.from_adjlist() calls of both
     a cudf and pandas DataFrame and ensure the results are equal.
     """
-    G = utils.generate_cugraph_graph_from_file(graph_file, directed=True)
+    G = dataset.get_graph()
     (cu_offsets, cu_indices, cu_vals) = G.view_adj_list()
 
     pd_offsets = cu_offsets.to_pandas()

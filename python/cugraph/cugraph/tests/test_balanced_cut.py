@@ -19,8 +19,11 @@ import networkx as nx
 import pandas as pd
 import cudf
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import TEST_GROUP, set_download_dir
+from pathlib import Path
 
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 def cugraph_call(G, partitions):
     df = cugraph.spectralBalancedCutClustering(
@@ -59,16 +62,12 @@ PARTITIONS = [2, 4, 8]
 # Test all combinations of default/managed and pooled/non-pooled allocation
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_edge_cut_clustering(graph_file, partitions):
+def test_edge_cut_clustering(partitions, dataset):
     gc.collect()
 
-    # Read in the graph and get a cugraph object
-    cu_M = utils.read_csv_file(graph_file, read_weights_in_sp=False)
-
-    G_edge = cugraph.Graph()
-    G_edge.from_cudf_edgelist(cu_M, source="0", destination="1")
+    G_edge = dataset.get_graph(default_direction=False)
 
     # Get the edge_cut score for partitioning versus random assignment
     cu_vid, cu_score = cugraph_call(G_edge, partitions)
@@ -76,21 +75,18 @@ def test_edge_cut_clustering(graph_file, partitions):
 
     # Assert that the partitioning has better edge_cut than the random
     # assignment
-    print('graph_file = ', graph_file, ', partitions = ', partitions)
+    print('graph_file = ', dataset.metadata['name'], ', partitions = ', partitions)
     print(cu_score, rand_score)
     assert cu_score < rand_score
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_edge_cut_clustering_with_edgevals(graph_file, partitions):
+def test_edge_cut_clustering_with_edgevals(dataset, partitions):
     gc.collect()
 
     # Read in the graph and get a cugraph object
-    cu_M = utils.read_csv_file(graph_file, read_weights_in_sp=False)
-
-    G_edge = cugraph.Graph()
-    G_edge.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G_edge = dataset.get_graph(default_direction=False)
 
     # Get the edge_cut score for partitioning versus random assignment
     cu_vid, cu_score = cugraph_call(G_edge, partitions)
@@ -124,14 +120,17 @@ def test_digraph_rejected():
         cugraph_call(G, 2)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_edge_cut_clustering_with_edgevals_nx(graph_file, partitions):
+def test_edge_cut_clustering_with_edgevals_nx(dataset, partitions):
     gc.collect()
 
     # Read in the graph and create a NetworkX Graph
     # FIXME: replace with utils.generate_nx_graph_from_file()
-    NM = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    NM = dataset.get_edgelist().rename(columns={"src": "0",
+                                                "dst": "1",
+                                                "wgt": "weight"})
+    NM = NM.to_pandas()
     G = nx.from_pandas_edgelist(
                 NM, create_using=nx.Graph(), source="0", target="1",
                 edge_attr="weight"
@@ -152,7 +151,7 @@ def test_edge_cut_clustering_with_edgevals_nx(graph_file, partitions):
 
     df = set(gdf["vertex"].to_numpy())
 
-    Gcu = cugraph.utilities.convert_from_nx(G)
+    Gcu = dataset.get_graph(default_direction=False)
     rand_vid, rand_score = random_call(Gcu, partitions)
 
     # Assert that the partitioning has better edge_cut than the random

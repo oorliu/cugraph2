@@ -17,6 +17,9 @@ import pytest
 
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (TEST_GROUP,
+                                           set_download_dir)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -31,6 +34,8 @@ with warnings.catch_warnings():
 
 
 print("Networkx version : {} ".format(nx.__version__))
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 
 def calc_k_cores(graph_file, directed=True):

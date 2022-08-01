@@ -17,7 +17,9 @@ import pytest
 import numpy as np
 
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (TEST_GROUP,
+                                           set_download_dir)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -34,21 +36,20 @@ with warnings.catch_warnings():
 print("Networkx version : {} ".format(nx.__version__))
 
 SOURCES = [1]
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
-
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("source", SOURCES)
-def test_filter_unreachable(graph_file, source):
+def test_filter_unreachable(dataset, source):
     gc.collect()
 
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist()
 
     print("sources size = " + str(len(cu_M)))
     print("destinations size = " + str(len(cu_M)))
 
     # cugraph Pagerank Call
-    G = cugraph.DiGraph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G = dataset.get_graph()
 
     print("cugraph Solving... ")
     t1 = time.time()

@@ -20,6 +20,7 @@ import cudf
 
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (TEST_GROUP, set_download_dir)
 
 
 # =============================================================================

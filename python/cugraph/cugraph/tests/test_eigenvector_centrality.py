@@ -18,12 +18,16 @@ import pytest
 import cudf
 import cugraph
 from cugraph.testing import utils
-
+from cugraph.experimental.datasets import (TEST_GROUP,
+                                           DATASETS_UNDIRECTED,
+                                           set_download_dir)
+from pathlib import Path
 import networkx as nx
 
 # This toy graph is used in multiple tests throughout libcugraph_c and pylib.
 TOY = utils.RAPIDS_DATASET_ROOT_DIR_PATH/"toy_graph.csv"
 
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -38,17 +42,15 @@ def topKVertices(eigen, col, k):
     return top["vertex"]
 
 
-def calc_eigenvector(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
-    G = cugraph.Graph(directed=True)
-    G.from_cudf_edgelist(cu_M, source="0", destination="1")
+def calc_eigenvector(dataset):
+    G = dataset.get_graph(weights=False)
 
     k_df = cugraph.eigenvector_centrality(G, max_iter=1000)
     k_df = k_df.sort_values("vertex").reset_index(drop=True)
 
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().to_pandas()
     Gnx = nx.from_pandas_edgelist(
-        NM, create_using=nx.DiGraph(), source="0", target="1"
+        NM, create_using=nx.DiGraph(), source="src", target="dst"
     )
     nk = nx.eigenvector_centrality(Gnx)
     pdf = [nk[k] for k in sorted(nk.keys())]
@@ -58,9 +60,9 @@ def calc_eigenvector(graph_file):
     return k_df
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_eigenvector_centrality(graph_file):
-    eigen_scores = calc_eigenvector(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_eigenvector_centrality(dataset):
+    eigen_scores = calc_eigenvector(dataset)
 
     topKNX = topKVertices(eigen_scores, "nx_eigen", 10)
     topKCU = topKVertices(eigen_scores, "cu_eigen", 10)
@@ -68,13 +70,13 @@ def test_eigenvector_centrality(graph_file):
     assert topKNX.equals(topKCU)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_eigenvector_centrality_nx(graph_file):
+@pytest.mark.parametrize("dataset", DATASETS_UNDIRECTED)
+def test_eigenvector_centrality_nx(dataset):
 
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().to_pandas()
 
     Gnx = nx.from_pandas_edgelist(
-        NM, create_using=nx.DiGraph(), source="0", target="1",
+        NM, create_using=nx.DiGraph(), source="src", target="dst",
     )
 
     nk = nx.eigenvector_centrality(Gnx)

@@ -19,6 +19,10 @@ import cudf
 import cugraph
 import networkx as nx
 from cugraph.testing import utils
+from cugraph.utilities import df_score_to_dictionary
+from cugraph.experimental.datasets import (DATASETS_UNDIRECTED,
+                                           set_download_dir)
+from pathlib import Path
 
 
 # =============================================================================
@@ -27,12 +31,8 @@ from cugraph.testing import utils
 def setup_function():
     gc.collect()
 
-
-# =============================================================================
-# Pytest fixtures
-# =============================================================================
-datasets = utils.DATASETS_UNDIRECTED
-degree_type = ["incoming", "outgoing"]
+set_download_dir(Path(__file__).parents[4] / "datasets")
+print("Networkx version : {} ".format(nx.__version__))
 
 fixture_params = utils.genFixtureParamsProduct((datasets, "graph_file"),
                                                (degree_type, "degree_type"),
@@ -95,18 +95,13 @@ def test_core_number(input_combo):
     assert len(counts_diff) == 0
 
 
-def test_core_number_invalid_input(input_combo):
-    input_data_path = (utils.RAPIDS_DATASET_ROOT_DIR_PATH /
-                       "karate-asymmetric.csv").as_posix()
-    M = utils.read_csv_for_nx(input_data_path)
-    G = cugraph.Graph(directed=True)
-    cu_M = cudf.DataFrame()
-    cu_M["src"] = cudf.Series(M["0"])
-    cu_M["dst"] = cudf.Series(M["1"])
+@pytest.mark.parametrize("dataset", DATASETS_UNDIRECTED)
+def test_core_number_nx(dataset):
+    gc.collect()
 
-    cu_M["weights"] = cudf.Series(M["weight"])
-    G.from_cudf_edgelist(
-        cu_M, source="src", destination="dst", edge_attr="weights"
+    NM = dataset.get_edgelist().to_pandas()
+    Gnx = nx.from_pandas_edgelist(
+        NM, source="src", target="dst", create_using=nx.Graph()
     )
 
     with pytest.raises(ValueError):

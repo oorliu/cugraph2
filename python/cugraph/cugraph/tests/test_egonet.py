@@ -17,7 +17,10 @@ import pytest
 
 import cudf
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (SMALL_DATASETS,
+                                           TEST_GROUP,
+                                           set_download_dir)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -35,17 +38,20 @@ print("Networkx version : {} ".format(nx.__version__))
 SEEDS = [0, 5, 13]
 RADIUS = [1, 2, 3]
 
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("radius", RADIUS)
-def test_ego_graph_nx(graph_file, seed, radius):
+def test_ego_graph_nx(dataset, seed, radius):
     gc.collect()
 
     # Nx
-    df = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    NM = dataset.get_edgelist().to_pandas()
     Gnx = nx.from_pandas_edgelist(
-        df, create_using=nx.Graph(), source="0", target="1", edge_attr="weight"
+        NM, create_using=nx.Graph(),
+        source="src", target="dst", edge_attr="wgt"
     )
     ego_nx = nx.ego_graph(Gnx, seed, radius=radius)
 
@@ -55,16 +61,17 @@ def test_ego_graph_nx(graph_file, seed, radius):
     assert nx.is_isomorphic(ego_nx, ego_cugraph)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("seeds", [[0, 5, 13]])
 @pytest.mark.parametrize("radius", [1, 2, 3])
-def test_batched_ego_graphs(graph_file, seeds, radius):
+def test_batched_ego_graphs(dataset, seeds, radius):
     gc.collect()
 
     # Nx
-    df = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    NM = dataset.get_edgelist().to_pandas().rename(columns={"wgt": "weight"})
     Gnx = nx.from_pandas_edgelist(
-        df, create_using=nx.Graph(), source="0", target="1", edge_attr="weight"
+        NM, create_using=nx.Graph(),
+        source="src", target="dst", edge_attr="weight"
     )
 
     # cugraph
@@ -78,14 +85,14 @@ def test_batched_ego_graphs(graph_file, seeds, radius):
     assert nx.is_isomorphic(ego_nx, ego_cugraph)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("radius", RADIUS)
-def test_multi_column_ego_graph(graph_file, seed, radius):
+def test_multi_column_ego_graph(dataset, seed, radius):
     gc.collect()
 
-    df = utils.read_csv_file(graph_file, read_weights_in_sp=True)
-    df.rename(columns={'0': 'src_0', '1': 'dst_0'}, inplace=True)
+    df = dataset.get_edgelist()
+    df.rename(columns={'src': 'src_0', 'dst': 'dst_0', "wgt": "2"}, inplace=True)
     df['src_1'] = df['src_0'] + 1000
     df['dst_1'] = df['dst_0'] + 1000
 

@@ -23,6 +23,9 @@ import cudf
 from cudf.testing.testing import assert_frame_equal
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (TEST_GROUP, set_download_dir,
+                                           karate, dolphins, polbooks)
+from pathlib import Path
 
 # MG
 import cugraph.dask as dcg
@@ -46,6 +49,9 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import networkx as nx
 
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+DATASETS_SMALL = [karate, dolphins, polbooks]
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -167,11 +173,11 @@ def test_version():
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_add_edge_list_to_adj_list(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_add_edge_list_to_adj_list(dataset):
+    cu_M = dataset.get_edgelist()
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = cu_M.to_pandas()
     N = max(max(M["0"]), max(M["1"])) + 1
     M = scipy.sparse.csr_matrix((M.weight, (M["0"], M["1"])), shape=(N, N))
     offsets_exp = M.indptr
@@ -187,9 +193,9 @@ def test_add_edge_list_to_adj_list(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_add_adj_list_to_edge_list(graph_file):
-    Mnx = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_add_adj_list_to_edge_list(dataset):
+    Mnx = dataset.get_edgelist().to_pandas()
     N = max(max(Mnx["0"]), max(Mnx["1"])) + 1
     Mcsr = scipy.sparse.csr_matrix(
         (Mnx.weight, (Mnx["0"], Mnx["1"])), shape=(N, N)
@@ -214,9 +220,9 @@ def test_add_adj_list_to_edge_list(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_view_edge_list_from_adj_list(graph_file):
-    Mnx = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_view_edge_list_from_adj_list(dataset):
+    Mnx = dataset.get_edgelist().to_pandas()
     N = max(max(Mnx["0"]), max(Mnx["1"])) + 1
     Mcsr = scipy.sparse.csr_matrix(
         (Mnx.weight, (Mnx["0"], Mnx["1"])), shape=(N, N)
@@ -235,9 +241,9 @@ def test_view_edge_list_from_adj_list(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_delete_edge_list_delete_adj_list(graph_file):
-    Mnx = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_delete_edge_list_delete_adj_list(dataset):
+    Mnx = dataset.get_edgelist().to_pandas()
     df = cudf.DataFrame()
     df["src"] = cudf.Series(Mnx["0"])
     df["dst"] = cudf.Series(Mnx["1"])
@@ -263,9 +269,9 @@ def test_delete_edge_list_delete_adj_list(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_add_edge_or_adj_list_after_add_edge_or_adj_list(graph_file):
-    Mnx = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_add_edge_or_adj_list_after_add_edge_or_adj_list(dataset):
+    Mnx = dataset.get_edgelist().to_pandas()
     df = cudf.DataFrame()
     df["src"] = cudf.Series(Mnx["0"])
     df["dst"] = cudf.Series(Mnx["1"])
@@ -302,9 +308,9 @@ def test_add_edge_or_adj_list_after_add_edge_or_adj_list(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_edges_for_Graph(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_edges_for_Graph(dataset):
+    cu_M = dataset.get_edgelist()
 
     # Create nx Graph
     pdf = cu_M.to_pandas()[['0', '1']]
@@ -340,9 +346,9 @@ def test_edges_for_Graph(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_view_edge_list_for_Graph(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_view_edge_list_for_Graph(dataset):
+    cu_M = dataset.get_edgelist()
 
     # Create nx Graph
     pdf = cu_M.to_pandas()[["0", "1"]]
@@ -417,15 +423,15 @@ def test_consolidation(graph_file):
 
 
 # Test
-@pytest.mark.parametrize('graph_file', utils.DATASETS_SMALL)
-def test_two_hop_neighbors(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize('dataset', TEST_GROUP)
+def test_two_hop_neighbors(dataset):
+    cu_M = dataset.get_edgelist()
 
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
 
     df = G.get_two_hop_neighbors()
-    Mnx = utils.read_csv_for_nx(graph_file)
+    Mnx = cu_M.to_pandas()
     N = max(max(Mnx["0"]), max(Mnx["1"])) + 1
     Mcsr = scipy.sparse.csr_matrix(
         (Mnx.weight, (Mnx["0"], Mnx["1"])), shape=(N, N)
@@ -436,10 +442,10 @@ def test_two_hop_neighbors(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_degree_functionality(graph_file):
-    M = utils.read_csv_for_nx(graph_file)
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_degree_functionality(dataset):
+    cu_M = dataset.get_edgelist()
+    M = cu_M.to_pandas()
 
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
@@ -474,10 +480,10 @@ def test_degree_functionality(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_degrees_functionality(graph_file):
-    M = utils.read_csv_for_nx(graph_file)
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_degrees_functionality(dataset):
+    cu_M = dataset.get_edgelist()
+    M = cu_M.to_pandas()
 
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
@@ -505,11 +511,11 @@ def test_degrees_functionality(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_number_of_vertices(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_number_of_vertices(dataset):
+    cu_M = dataset.get_edgelist()
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = cu_M.to_pandas()
     if M is None:
         raise TypeError("Could not read the input graph")
 
@@ -523,11 +529,11 @@ def test_number_of_vertices(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS_SMALL)
-def test_to_directed(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", DATASETS_SMALL)
+def test_to_directed(dataset):
+    cu_M = dataset.get_edgelist()
     cu_M = cu_M[cu_M["0"] <= cu_M["1"]].reset_index(drop=True)
-    M = utils.read_csv_for_nx(graph_file)
+    M = cu_M.to_pandas()
     M = M[M["0"] <= M["1"]]
     assert len(cu_M) == len(M)
 
@@ -552,13 +558,13 @@ def test_to_directed(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS_SMALL)
-def test_to_undirected(graph_file):
+@pytest.mark.parametrize("dataset", DATASETS_SMALL)
+def test_to_undirected(dataset):
     # Read data and then convert to directed by dropped some edges
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist()
     cu_M = cu_M[cu_M["0"] <= cu_M["1"]].reset_index(drop=True)
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = cu_M.to_pandas()
     M = M[M["0"] <= M["1"]]
     assert len(cu_M) == len(M)
 
@@ -588,9 +594,9 @@ def test_to_undirected(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_has_edge(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_has_edge(dataset):
+    cu_M = dataset.get_edgelist90
     cu_M = cu_M[cu_M["0"] <= cu_M["1"]].reset_index(drop=True)
 
     # cugraph add_edge_list
@@ -603,9 +609,9 @@ def test_has_edge(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_has_node(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_has_node(dataset):
+    cu_M = dataset.get_edgelist()
     nodes = cudf.concat([cu_M["0"], cu_M["1"]]).unique()
 
     # cugraph add_edge_list
@@ -625,11 +631,11 @@ def test_invalid_has_node():
     assert not G.has_node(G.number_of_nodes() + 1)
 
 
-@pytest.mark.parametrize('graph_file', utils.DATASETS)
-def test_bipartite_api(graph_file):
+@pytest.mark.parametrize('dataset', TEST_GROUP)
+def test_bipartite_api(dataset):
     # This test only tests the functionality of adding set of nodes and
     # retrieving them. The datasets currently used are not truly bipartite.
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist()
     nodes = cudf.concat([cu_M['0'], cu_M['1']]).unique()
 
     # Create set of nodes for partition
@@ -654,11 +660,11 @@ def test_bipartite_api(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_neighbors(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_neighbors(dataset):
+    cu_M = dataset.get_edgelist()
     nodes = cudf.concat([cu_M["0"], cu_M["1"]]).unique()
-    M = utils.read_csv_for_nx(graph_file)
+    M = cu_M.to_pandas()
 
     G = cugraph.Graph()
     G.from_cudf_edgelist(cu_M, source="0", destination="1")
@@ -674,9 +680,9 @@ def test_neighbors(graph_file):
 
 
 # Test
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_to_pandas_edgelist(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_to_pandas_edgelist(dataset):
+    cu_M = dataset.get_edgelist()
 
     G = cugraph.Graph()
     G.from_cudf_edgelist(cu_M, source="0", destination="1")

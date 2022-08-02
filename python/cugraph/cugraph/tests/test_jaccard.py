@@ -37,7 +37,6 @@ with warnings.catch_warnings():
 
 
 print("Networkx version : {} ".format(nx.__version__))
-
 set_download_dir(Path(__file__).parents[4] / "datasets")
 
 # =============================================================================

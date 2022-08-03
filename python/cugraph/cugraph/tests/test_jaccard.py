@@ -77,7 +77,7 @@ def compare_jaccard_two_hop(G, Gnx):
 def cugraph_call(benchmark_callable, cu_M, edgevals=False):
     G = cugraph.Graph()
     if edgevals is True:
-        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="weight")
     else:
         G.from_cudf_edgelist(cu_M, source="0", destination="1")
 
@@ -187,8 +187,10 @@ def test_nx_jaccard_time(read_csv, gpubenchmark):
 
 
 def test_jaccard_edgevals(gpubenchmark):
-
-    cu_M = netscience.get_edgelist()
+    cu_M = netscience.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
+    print(cu_M)
     M = cu_M.to_pandas()
     cu_src, cu_dst, cu_coeff = cugraph_call(gpubenchmark, cu_M, edgevals=True)
     nx_src, nx_dst, nx_coeff = networkx_call(M)
@@ -209,12 +211,13 @@ def test_jaccard_edgevals(gpubenchmark):
 def test_jaccard_two_hop(read_csv):
 
     M, cu_M = read_csv
+    print(M)
+    print(cu_M)
     Gnx = nx.from_pandas_edgelist(
         M, source="0", target="1", create_using=nx.Graph()
     )
-    cu_M = cugraph.Graph()
-    G = cugraph.from_cudf_edgelist(cu_M, source=["0"],
-                                   destination=["1"])
+    G = cugraph.Graph()
+    G.from_cudf_edgelist(cu_M, source="0", destination="1")
 
     compare_jaccard_two_hop(G, Gnx)
 
@@ -227,7 +230,7 @@ def test_jaccard_two_hop_edge_vals(read_csv):
         M, source="0", target="1", edge_attr="weight", create_using=nx.Graph()
     )
     G = cugraph.Graph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="weight")
 
     compare_jaccard_two_hop(G, Gnx)
 

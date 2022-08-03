@@ -18,10 +18,9 @@ import cudf
 from cudf.testing import assert_series_equal
 
 import cugraph
-from cugraph.experimental.datasets import (netscience,
-                                           set_download_dir,
-                                           DATASETS_UNDIRECTED)
-
+from cugraph.testing import utils
+from cugraph.experimental.datasets import (karate, dolphins, netscience,
+                                           set_download_dir)
 from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -37,7 +36,9 @@ with warnings.catch_warnings():
 
 
 print("Networkx version : {} ".format(nx.__version__))
+
 set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate, dolphins]
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -129,12 +130,14 @@ def networkx_call(M, benchmark_callable=None):
 # =============================================================================
 # Pytest Fixtures
 # =============================================================================
-@pytest.fixture(scope="module", params=DATASETS_UNDIRECTED)
+@pytest.fixture(scope="module", params=TEST_GROUP)
 def read_csv(request):
     """
     Read csv file for both networkx and cugraph
     """
-    cu_M = request.param.get_edgelist()
+    cu_M = request.param.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     M = cu_M.to_pandas()
 
     return M, cu_M
@@ -183,9 +186,9 @@ def test_nx_jaccard_time(read_csv, gpubenchmark):
     nx_src, nx_dst, nx_coeff = networkx_call(M, gpubenchmark)
 
 
-@pytest.mark.parametrize("dataset", netscience)
-def test_jaccard_edgevals(gpubenchmark, dataset):
-    cu_M = dataset.get_edgelist()
+def test_jaccard_edgevals(gpubenchmark):
+
+    cu_M = netscience.get_edgelist()
     M = cu_M.to_pandas()
     cu_src, cu_dst, cu_coeff = cugraph_call(gpubenchmark, cu_M, edgevals=True)
     nx_src, nx_dst, nx_coeff = networkx_call(M)
@@ -206,12 +209,12 @@ def test_jaccard_edgevals(gpubenchmark, dataset):
 def test_jaccard_two_hop(read_csv):
 
     M, cu_M = read_csv
-
     Gnx = nx.from_pandas_edgelist(
         M, source="0", target="1", create_using=nx.Graph()
     )
-    G = cugraph.Graph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1")
+    cu_M = cugraph.Graph()
+    G = cugraph.from_cudf_edgelist(cu_M, source=["0"],
+                                   destination=["1"])
 
     compare_jaccard_two_hop(G, Gnx)
 

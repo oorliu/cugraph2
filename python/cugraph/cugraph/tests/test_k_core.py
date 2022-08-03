@@ -17,7 +17,7 @@ import pytest
 
 import cugraph
 from cugraph.testing import utils
-from cugraph.experimental.datasets import (TEST_GROUP,
+from cugraph.experimental.datasets import (karate, dolphins,
                                            set_download_dir)
 from pathlib import Path
 
@@ -36,24 +36,24 @@ with warnings.catch_warnings():
 print("Networkx version : {} ".format(nx.__version__))
 
 set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate, dolphins]
 
 
-def calc_k_cores(graph_file, directed=True):
+def calc_k_cores(dataset, directed=True):
     # directed is used to create either a Graph or DiGraph so the returned
     # cugraph can be compared to nx graph of same type.
-    cu_M = utils.read_csv_file(graph_file)
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().drop(columns=['wgt']).to_pandas()
     if directed:
-        G = cugraph.DiGraph()
         Gnx = nx.from_pandas_edgelist(
-            NM, source="0", target="1", create_using=nx.DiGraph()
+            NM, source="src", target="dst", create_using=nx.DiGraph()
         )
     else:
-        G = cugraph.Graph()
         Gnx = nx.from_pandas_edgelist(
-            NM, source="0", target="1", create_using=nx.Graph()
+            NM, source="src", target="dst", create_using=nx.Graph()
         )
-    G.from_cudf_edgelist(cu_M, source="0", destination="1")
+    G = dataset.get_graph(create_using=cugraph.Graph(directed=directed),
+                          ignore_weights=True)
+
     ck = cugraph.k_core(G)
     nk = nx.k_core(Gnx)
     return ck, nk
@@ -69,22 +69,22 @@ def compare_edges(cg, nxg):
     return True
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_k_core_Graph(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_k_core_Graph(dataset):
     gc.collect()
 
-    cu_kcore, nx_kcore = calc_k_cores(graph_file, False)
+    cu_kcore, nx_kcore = calc_k_cores(dataset, False)
 
     assert compare_edges(cu_kcore, nx_kcore)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_k_core_Graph_nx(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_k_core_Graph_nx(dataset):
     gc.collect()
 
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().to_pandas()
     Gnx = nx.from_pandas_edgelist(
-        NM, source="0", target="1", create_using=nx.Graph()
+        NM, source="src", target="dst", create_using=nx.Graph()
     )
     nc = nx.k_core(Gnx)
     cc = cugraph.k_core(Gnx)
@@ -92,12 +92,12 @@ def test_k_core_Graph_nx(graph_file):
     assert nx.is_isomorphic(nc, cc)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_k_core_corenumber_multicolumn(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_k_core_corenumber_multicolumn(dataset):
     gc.collect()
 
-    cu_M = utils.read_csv_file(graph_file)
-    cu_M.rename(columns={'0': 'src_0', '1': 'dst_0'}, inplace=True)
+    cu_M = dataset.get_edgelist()
+    cu_M.rename(columns={'src': 'src_0', 'dst': 'dst_0'}, inplace=True)
     cu_M['src_1'] = cu_M['src_0'] + 1000
     cu_M['dst_1'] = cu_M['dst_0'] + 1000
 

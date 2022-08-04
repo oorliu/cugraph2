@@ -36,6 +36,7 @@ with warnings.catch_warnings():
 # This toy graph is used in multiple tests throughout libcugraph_c and pylib.
 TOY = Path(__file__).parents[4] /'datasets/toy_graph_undirected.csv'
 DATASETS_UNDIRECTED = [karate, dolphins]
+set_download_dir(Path(__file__)).parents[4] / "datasets"
 
 
 # =============================================================================

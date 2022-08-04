@@ -15,10 +15,13 @@ import gc
 import time
 
 import pytest
-
+import cudf
 import networkx as nx
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (karate, dolphins,
+                                           TEST_GROUP,
+                                           set_download_dir)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -30,6 +33,9 @@ import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+DATAPATH = Path(__file__).parents[4] / "datasets"
+DATASETS_UNDIRECTED = [karate, dolphins]
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -60,11 +66,13 @@ def cugraph_louvain(G):
     return parts, mod
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_leiden(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_leiden(dataset):
     edgevals = True
 
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
 
     G = cugraph.Graph()
     if edgevals:
@@ -79,11 +87,13 @@ def test_leiden(graph_file):
     assert leiden_mod >= (0.99 * louvain_mod)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_leiden_nx(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_leiden_nx(dataset):
     edgevals = True
 
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    ).to_pandas()
 
     if edgevals:
         G = nx.from_pandas_edgelist(
@@ -102,11 +112,15 @@ def test_leiden_nx(graph_file):
 
 
 def test_leiden_directed_graph():
-    input_data_path = (utils.RAPIDS_DATASET_ROOT_DIR_PATH /
-                       "karate-asymmetric.csv").as_posix()
+    input_data_path = (DATAPATH / "karate-asymmetric.csv").as_posix()
 
     edgevals = True
-    cu_M = utils.read_csv_file(input_data_path)
+    cu_M = cudf.read_csv(
+            input_data_path,
+            delimiter=" ",
+            dtype=["int32", "int32", "float32"],
+            header=None,
+        )
     G = cugraph.Graph(directed=True)
     if edgevals:
         G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")

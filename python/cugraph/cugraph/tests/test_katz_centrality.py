@@ -17,7 +17,10 @@ import pytest
 
 import cudf
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (karate, dolphins,
+                                           TEST_GROUP,
+                                           set_download_dir)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -31,7 +34,8 @@ with warnings.catch_warnings():
     import networkx as nx
 
 # This toy graph is used in multiple tests throughout libcugraph_c and pylib.
-TOY = utils.RAPIDS_DATASET_ROOT_DIR_PATH/'toy_graph_undirected.csv'
+TOY = Path(__file__).parents[4] /'datasets/toy_graph_undirected.csv'
+DATASETS_UNDIRECTED = [karate, dolphins]
 
 
 # =============================================================================
@@ -47,10 +51,11 @@ def topKVertices(katz, col, k):
     return top["vertex"]
 
 
-def calc_katz(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
-    G = cugraph.Graph(directed=True)
-    G.from_cudf_edgelist(cu_M, source="0", destination="1")
+def calc_katz(dataset):
+    G = dataset.get_graph(
+        create_using=cugraph.Graph(directed=True),
+        ignore_weights=True
+    )
 
     degree_max = G.degree()['degree'].max()
     katz_alpha = 1 / (degree_max)
@@ -58,7 +63,9 @@ def calc_katz(graph_file):
     k_df = cugraph.katz_centrality(G, alpha=None, max_iter=1000)
     k_df = k_df.sort_values("vertex").reset_index(drop=True)
 
-    NM = utils.read_csv_for_nx(graph_file)
+    NM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1'}
+    ).to_pandas()
     Gnx = nx.from_pandas_edgelist(
         NM, create_using=nx.DiGraph(), source="0", target="1"
     )
@@ -69,9 +76,9 @@ def calc_katz(graph_file):
     return k_df
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_katz_centrality_1(graph_file):
-    katz_scores = calc_katz(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_katz_centrality_1(dataset):
+    katz_scores = calc_katz(dataset)
 
     topKNX = topKVertices(katz_scores, "nx_katz", 10)
     topKCU = topKVertices(katz_scores, "cu_katz", 10)
@@ -79,9 +86,11 @@ def test_katz_centrality_1(graph_file):
     assert topKNX.equals(topKCU)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_katz_centrality_nx(graph_file):
-    NM = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", DATASETS_UNDIRECTED)
+def test_katz_centrality_nx(dataset):
+    NM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1'}
+    ).to_pandas()
 
     Gnx = nx.from_pandas_edgelist(
         NM, create_using=nx.DiGraph(), source="0", target="1",
@@ -109,10 +118,10 @@ def test_katz_centrality_nx(graph_file):
     assert err < (0.1 * len(ck))
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_katz_centrality_multi_column(graph_file):
-    cu_M = utils.read_csv_file(graph_file)
-    cu_M.rename(columns={'0': 'src_0', '1': 'dst_0'}, inplace=True)
+@pytest.mark.parametrize("dataset", DATASETS_UNDIRECTED)
+def test_katz_centrality_multi_column(dataset):
+    cu_M = dataset.get_edgelist()
+    cu_M.rename(columns={'src': 'src_0', 'dst': 'dst_0'}, inplace=True)
     cu_M['src_1'] = cu_M['src_0'] + 1000
     cu_M['dst_1'] = cu_M['dst_0'] + 1000
 

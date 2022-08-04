@@ -17,6 +17,9 @@ import pytest
 
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (karate, dolphins, polbooks,
+                                           set_download_dir)
+from pathlib import Path
 
 import numpy as np
 from numba import cuda
@@ -33,6 +36,9 @@ with warnings.catch_warnings():
     import networkx as nx
 
 print("Networkx version : {} ".format(nx.__version__))
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [polbooks]
 
 
 # =============================================================================
@@ -92,9 +98,7 @@ def test_unsupported_cuda_version():
     unsupported env, and not when called in a supported env.
     """
     k = 5
-    cu_M = utils.read_csv_file(utils.DATASETS_KTRUSS[0][0])
-    G = cugraph.Graph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G = polbooks.get_graph()
 
     if __cuda_version == __unsupported_cuda_version:
         with pytest.raises(NotImplementedError):

@@ -18,7 +18,6 @@ import cudf
 from cudf.testing import assert_series_equal
 
 import cugraph
-from cugraph.testing import utils
 from cugraph.experimental.datasets import (karate, dolphins, netscience,
                                            set_download_dir)
 from pathlib import Path

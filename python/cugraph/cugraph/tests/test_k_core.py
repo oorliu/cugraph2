@@ -16,7 +16,6 @@ import gc
 import pytest
 
 import cugraph
-from cugraph.testing import utils
 from cugraph.experimental.datasets import (karate, dolphins,
                                            set_download_dir)
 from pathlib import Path

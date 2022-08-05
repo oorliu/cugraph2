@@ -20,6 +20,14 @@ import pytest
 import cudf
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience, karate)
+from pathlib import Path
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -159,7 +167,7 @@ def setup_function():
 #
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("max_iter", MAX_ITERATIONS)
 @pytest.mark.parametrize("tol", TOLERANCE)
 @pytest.mark.parametrize("alpha", ALPHA)
@@ -167,12 +175,14 @@ def setup_function():
 @pytest.mark.parametrize("has_guess", HAS_GUESS)
 @pytest.mark.parametrize("has_precomputed_vertex_out_weight", HAS_PRECOMPUTED)
 def test_pagerank(
-    graph_file, max_iter, tol, alpha, personalization_perc, has_guess,
+    dataset, max_iter, tol, alpha, personalization_perc, has_guess,
     has_precomputed_vertex_out_weight
 ):
 
     # NetworkX PageRank
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     nnz_vtx = np.unique(M[['0', '1']])
     Gnx = nx.from_pandas_edgelist(
         M, source="0", target="1", edge_attr="weight",
@@ -191,7 +201,9 @@ def test_pagerank(
     cu_prsn = cudify(networkx_prsn)
 
     # cuGraph PageRank
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(
         cu_M, source="0", destination="1", edge_attr="2",
@@ -221,18 +233,20 @@ def test_pagerank(
     assert err < (0.01 * len(cugraph_pr))
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("max_iter", MAX_ITERATIONS)
 @pytest.mark.parametrize("tol", TOLERANCE)
 @pytest.mark.parametrize("alpha", ALPHA)
 @pytest.mark.parametrize("personalization_perc", PERSONALIZATION_PERC)
 @pytest.mark.parametrize("has_guess", HAS_GUESS)
 def test_pagerank_nx(
-    graph_file, max_iter, tol, alpha, personalization_perc, has_guess
+    dataset, max_iter, tol, alpha, personalization_perc, has_guess
 ):
 
     # NetworkX PageRank
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     nnz_vtx = np.unique(M[['0', '1']])
     Gnx = nx.from_pandas_edgelist(
         M, source="0", target="1", create_using=nx.DiGraph()
@@ -268,7 +282,7 @@ def test_pagerank_nx(
     assert err < (0.01 * len(cugraph_pr))
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("max_iter", MAX_ITERATIONS)
 @pytest.mark.parametrize("tol", TOLERANCE)
 @pytest.mark.parametrize("alpha", ALPHA)
@@ -276,12 +290,14 @@ def test_pagerank_nx(
 @pytest.mark.parametrize("has_guess", HAS_GUESS)
 @pytest.mark.parametrize("has_precomputed_vertex_out_weight", HAS_PRECOMPUTED)
 def test_pagerank_multi_column(
-    graph_file, max_iter, tol, alpha, personalization_perc, has_guess,
+    dataset, max_iter, tol, alpha, personalization_perc, has_guess,
     has_precomputed_vertex_out_weight
 ):
 
     # NetworkX PageRank
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     nnz_vtx = np.unique(M[['0', '1']])
 
     Gnx = nx.from_pandas_edgelist(
@@ -363,9 +379,9 @@ def test_pagerank_multi_column(
 
 
 def test_pagerank_invalid_personalization_dtype():
-    input_data_path = (utils.RAPIDS_DATASET_ROOT_DIR_PATH /
-                       "karate.csv").as_posix()
-    M = utils.read_csv_for_nx(input_data_path)
+    M = karate.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     G = cugraph.Graph(directed=True)
     cu_M = cudf.DataFrame()
     cu_M["src"] = cudf.Series(M["0"])

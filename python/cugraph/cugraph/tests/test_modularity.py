@@ -18,10 +18,17 @@ import pytest
 
 import cudf
 import cugraph
-from cugraph.testing import utils
 from cugraph.utilities import ensure_cugraph_obj_for_nx
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint,
+                                           netscience, dolphins)
+from pathlib import Path
 
 import networkx as nx
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, netscience, dolphins]
 
 
 def cugraph_call(G, partitions):
@@ -54,15 +61,15 @@ def random_call(G, partitions):
 PARTITIONS = [2, 4, 8]
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_modularity_clustering(graph_file, partitions):
+def test_modularity_clustering(dataset, partitions):
     gc.collect()
 
     # Read in the graph and get a cugraph object
-    cu_M = utils.read_csv_file(graph_file, read_weights_in_sp=False)
+    cu_M = dataset.get_edgelist()
     G = cugraph.Graph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cu_M, source="src", destination="dst", edge_attr="wgt")
 
     # Get the modularity score for partitioning versus random assignment
     cu_score = cugraph_call(G, partitions)
@@ -73,16 +80,18 @@ def test_modularity_clustering(graph_file, partitions):
     assert cu_score > rand_score
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_modularity_clustering_nx(graph_file, partitions):
+def test_modularity_clustering_nx(dataset, partitions):
     # Read in the graph and get a cugraph object
-    csv_data = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    csv_data = dataset.get_edgelist().rename(
+        columns={'wgt': 'weight'}
+    ).to_pandas()
 
     nxG = nx.from_pandas_edgelist(
             csv_data,
-            source="0",
-            target="1",
+            source="src",
+            target="dst",
             edge_attr="weight",
             create_using=nx.Graph(),
         )
@@ -102,19 +111,19 @@ def test_modularity_clustering_nx(graph_file, partitions):
     assert cu_score > rand_score
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize("partitions", PARTITIONS)
-def test_modularity_clustering_multi_column(graph_file, partitions):
+def test_modularity_clustering_multi_column(dataset, partitions):
     # Read in the graph and get a cugraph object
-    cu_M = utils.read_csv_file(graph_file, read_weights_in_sp=False)
-    cu_M.rename(columns={'0': 'src_0', '1': 'dst_0'}, inplace=True)
+    cu_M = dataset.get_edgelist()
+    cu_M.rename(columns={'src': 'src_0', 'dst': 'dst_0'}, inplace=True)
     cu_M['src_1'] = cu_M['src_0'] + 1000
     cu_M['dst_1'] = cu_M['dst_0'] + 1000
 
     G1 = cugraph.Graph()
     G1.from_cudf_edgelist(cu_M, source=["src_0", "src_1"],
                           destination=["dst_0", "dst_1"],
-                          edge_attr="2")
+                          edge_attr="wgt")
 
     df1 = cugraph.spectralModularityMaximizationClustering(
         G1, partitions, num_eigen_vects=(partitions - 1)
@@ -128,7 +137,7 @@ def test_modularity_clustering_multi_column(graph_file, partitions):
     G2 = cugraph.Graph()
     G2.from_cudf_edgelist(cu_M, source="src_0",
                           destination="dst_0",
-                          edge_attr="2")
+                          edge_attr="wgt")
 
     rand_score = random_call(G2, partitions)
     # Assert that the partitioning has better modularity than the random

@@ -19,6 +19,14 @@ from cudf.testing import assert_series_equal
 
 from cugraph.testing import utils
 import cugraph
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience, karate)
+from pathlib import Path
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 
 # =============================================================================

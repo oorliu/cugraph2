@@ -16,11 +16,12 @@ import gc
 import pytest
 
 import cugraph
+import cudf
 from cugraph.testing import utils
-from cugraph.experimental.datasets import (karate, dolphins, polbooks,
+from cugraph.experimental.datasets import (karate_asymmetric,
+                                           polbooks,
                                            set_download_dir)
 from pathlib import Path
-
 import numpy as np
 from numba import cuda
 
@@ -37,9 +38,10 @@ with warnings.catch_warnings():
 
 print("Networkx version : {} ".format(nx.__version__))
 
-set_download_dir(Path(__file__).parents[4] / "datasets")
+DATASETS_PATH = Path(__file__).parents[4] / "datasets"
+set_download_dir(DATASETS_PATH)
+ground_truth_file = DATASETS_PATH / "ref/ktruss/polbooks.csv"
 TEST_GROUP = [polbooks]
-
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -54,9 +56,9 @@ def setup_function():
 # parameter k. This fix (https://github.com/networkx/networkx/pull/3713) is
 # currently in networkx master and will hopefully will make it to a release
 # soon.
-def ktruss_ground_truth(graph_file):
+def ktruss_ground_truth():
     G = nx.read_edgelist(
-        str(graph_file),
+        str(ground_truth_file),
         nodetype=int,
         data=(("weights", float),)
     )
@@ -64,8 +66,8 @@ def ktruss_ground_truth(graph_file):
     return df
 
 
-def compare_k_truss(k_truss_cugraph, k, ground_truth_file):
-    k_truss_nx = ktruss_ground_truth(ground_truth_file)
+def compare_k_truss(k_truss_cugraph, k):
+    k_truss_nx = ktruss_ground_truth()
 
     edgelist_df = k_truss_cugraph.view_edge_list()
     src = edgelist_df["src"]
@@ -98,7 +100,11 @@ def test_unsupported_cuda_version():
     unsupported env, and not when called in a supported env.
     """
     k = 5
-    G = polbooks.get_graph()
+    cu_M = TEST_GROUP[0].get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
+    G = cugraph.Graph()
+    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
 
     if __cuda_version == __unsupported_cuda_version:
         with pytest.raises(NotImplementedError):
@@ -110,26 +116,30 @@ def test_unsupported_cuda_version():
 @pytest.mark.skipif((__cuda_version == __unsupported_cuda_version),
                     reason="skipping on unsupported CUDA "
                     f"{__unsupported_cuda_version} environment.")
-@pytest.mark.parametrize("graph_file, nx_ground_truth", utils.DATASETS_KTRUSS)
-def test_ktruss_subgraph_Graph(graph_file, nx_ground_truth):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_ktruss_subgraph_Graph(dataset):
 
     k = 5
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
     G = cugraph.Graph()
     G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
     k_subgraph = cugraph.ktruss_subgraph(G, k)
 
-    compare_k_truss(k_subgraph, k, nx_ground_truth)
+    compare_k_truss(k_subgraph, k)
 
 
 @pytest.mark.skipif((__cuda_version == __unsupported_cuda_version),
                     reason="skipping on unsupported CUDA "
                     f"{__unsupported_cuda_version} environment.")
-@pytest.mark.parametrize("graph_file, nx_ground_truth", utils.DATASETS_KTRUSS)
-def test_ktruss_subgraph_Graph_nx(graph_file, nx_ground_truth):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_ktruss_subgraph_Graph_nx(dataset,):
 
     k = 5
-    M = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     G = nx.from_pandas_edgelist(
         M, source="0", target="1", edge_attr="weight",
         create_using=nx.Graph()
@@ -144,11 +154,11 @@ def test_ktruss_subgraph_Graph_nx(graph_file, nx_ground_truth):
                     reason="skipping on unsupported CUDA "
                     f"{__unsupported_cuda_version} environment.")
 def test_ktruss_subgraph_directed_Graph():
-    input_data_path = (utils.RAPIDS_DATASET_ROOT_DIR_PATH /
-                       "karate-asymmetric.csv").as_posix()
     k = 5
     edgevals = True
-    cu_M = utils.read_csv_file(input_data_path)
+    cu_M = karate_asymmetric.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
     G = cugraph.Graph(directed=True)
     if edgevals:
         G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")

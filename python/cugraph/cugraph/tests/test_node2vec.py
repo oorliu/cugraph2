@@ -16,9 +16,16 @@ import random
 
 import pytest
 
-from cugraph.testing import utils
 import cugraph
 import cudf
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate, small_line,
+                                           polbooks, dolphins)
+from pathlib import Path
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate, dolphins, polbooks]
 
 
 # =============================================================================
@@ -26,8 +33,6 @@ import cudf
 # =============================================================================
 DIRECTED_GRAPH_OPTIONS = [False, True]
 COMPRESSED = [False, True]
-LINE = utils.RAPIDS_DATASET_ROOT_DIR_PATH/"small_line.csv"
-KARATE = utils.RAPIDS_DATASET_ROOT_DIR_PATH/"karate.csv"
 
 
 # =============================================================================
@@ -77,12 +82,9 @@ def calc_node2vec(G,
     return (vertex_paths, edge_weights, vertex_path_sizes), start_vertices
 
 
-@pytest.mark.parametrize(*_get_param_args("graph_file", [KARATE]))
-def test_node2vec_invalid(
-    graph_file
-):
-    G = utils.generate_cugraph_graph_from_file(graph_file, directed=True,
-                                               edgevals=True)
+@pytest.mark.parametrize(*_get_param_args("dataset", [karate]))
+def test_node2vec_invalid(dataset):
+    G = dataset.get_graph(create_using=cugraph.Graph(directed=True))
     k = random.randint(1, 10)
     start_vertices = cudf.Series(random.sample(range(G.number_of_vertices()),
                                  k), dtype="int32")
@@ -118,11 +120,10 @@ def test_node2vec_invalid(
                                       compress_result=compress, p=p, q=q)
 
 
-@pytest.mark.parametrize(*_get_param_args("graph_file", [LINE]))
+@pytest.mark.parametrize(*_get_param_args("dataset", [small_line]))
 @pytest.mark.parametrize(*_get_param_args("directed", DIRECTED_GRAPH_OPTIONS))
-def test_node2vec_line(graph_file, directed):
-    G = utils.generate_cugraph_graph_from_file(graph_file, directed=directed,
-                                               edgevals=True)
+def test_node2vec_line(dataset, directed):
+    G = dataset.get_graph(create_using=cugraph.Graph(directed=directed))
     max_depth = 3
     start_vertices = cudf.Series([0, 3, 6], dtype="int32")
     df, seeds = calc_node2vec(
@@ -135,15 +136,17 @@ def test_node2vec_line(graph_file, directed):
     )
 
 
-@pytest.mark.parametrize(*_get_param_args("graph_file", utils.DATASETS_SMALL))
+@pytest.mark.parametrize(*_get_param_args("dataset", TEST_GROUP))
 @pytest.mark.parametrize(*_get_param_args("directed", DIRECTED_GRAPH_OPTIONS))
 @pytest.mark.parametrize(*_get_param_args("compress", COMPRESSED))
 def test_node2vec(
-    graph_file,
+    dataset,
     directed,
     compress,
 ):
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
 
     G = cugraph.Graph(directed=directed)
 
@@ -255,14 +258,15 @@ def test_node2vec(
                                  vertex:{}".format(vertex_paths.values))
 
 
-@pytest.mark.parametrize(*_get_param_args("graph_file", [LINE]))
+@pytest.mark.parametrize(*_get_param_args("dataset", [small_line]))
 @pytest.mark.parametrize(*_get_param_args("renumber", [True, False]))
 def test_node2vec_renumber_cudf(
-    graph_file,
+    dataset,
     renumber
 ):
-    cu_M = cudf.read_csv(graph_file, delimiter=' ',
-                         dtype=['int32', 'int32', 'float32'], header=None)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2",
                          renumber=renumber)

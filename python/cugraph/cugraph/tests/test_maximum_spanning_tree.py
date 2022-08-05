@@ -21,6 +21,9 @@ import cudf
 
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           netscience)
+from pathlib import Path
 
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -36,6 +39,8 @@ with warnings.catch_warnings():
 
 print("Networkx version : {} ".format(nx.__version__))
 
+TEST_GROUP = [netscience]
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -54,12 +59,14 @@ def _get_param_args(param_name, param_values):
             [pytest.param(v, id=f"{param_name}={v}") for v in param_values])
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED_WEIGHTS)
-def test_maximum_spanning_tree_nx(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_maximum_spanning_tree_nx(dataset):
     # cugraph
-    cuG = utils.read_csv_file(graph_file, read_weights_in_sp=True)
+    cuG = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     G = cugraph.Graph()
-    G.from_cudf_edgelist(cuG, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cuG, source="0", destination="1", edge_attr="weight")
     # Just for getting relevant timing
     G.view_adj_list()
     t1 = time.time()
@@ -68,7 +75,7 @@ def test_maximum_spanning_tree_nx(graph_file):
     print("CuGraph time : " + str(t2))
 
     # Nx
-    df = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    df = cuG.to_pandas()
     Gnx = nx.from_pandas_edgelist(
         df, create_using=nx.Graph(), source="0", target="1", edge_attr="weight"
     )
@@ -80,10 +87,12 @@ def test_maximum_spanning_tree_nx(graph_file):
     utils.compare_mst(cugraph_mst, mst_nx)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED_WEIGHTS)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
 @pytest.mark.parametrize(*_get_param_args("use_adjlist", [True, False]))
-def test_maximum_spanning_tree_graph_repr_compat(graph_file, use_adjlist):
-    cuG = utils.read_csv_file(graph_file, read_weights_in_sp=True)
+def test_maximum_spanning_tree_graph_repr_compat(dataset, use_adjlist):
+    cuG = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
     G = cugraph.Graph()
     G.from_cudf_edgelist(cuG, source="0", destination="1", edge_attr="2")
     if use_adjlist:

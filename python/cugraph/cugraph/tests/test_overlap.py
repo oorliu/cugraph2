@@ -20,7 +20,13 @@ import cudf
 from cudf.testing import assert_series_equal
 
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate, dolphins)
+from pathlib import Path
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate, dolphins]
 
 
 # =============================================================================
@@ -50,7 +56,7 @@ def cugraph_call(benchmark_callable, cu_M, pairs, edgevals=False):
     G = cugraph.DiGraph()
     # Device data
     if edgevals is True:
-        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="weight")
     else:
         G.from_cudf_edgelist(cu_M, source="0", destination="1")
     # cugraph Overlap Call
@@ -106,19 +112,23 @@ def cpu_call(M, first, second):
 # =============================================================================
 # Pytest Fixtures
 # =============================================================================
-@pytest.fixture(scope="module", params=utils.DATASETS_UNDIRECTED)
+@pytest.fixture(scope="module", params=TEST_GROUP)
 def read_csv(request):
     """
     Read csv file for both networkx and cugraph
     """
 
-    Mnx = utils.read_csv_for_nx(request.param)
+    Mnx = request.param.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     N = max(max(Mnx["0"]), max(Mnx["1"])) + 1
     M = scipy.sparse.csr_matrix(
         (Mnx.weight, (Mnx["0"], Mnx["1"])), shape=(N, N)
     )
 
-    cu_M = utils.read_csv_file(request.param)
+    cu_M = request.param.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     print("cu_M is \n", cu_M)
     return M, cu_M
 
@@ -163,10 +173,12 @@ def test_overlap_edge_vals(gpubenchmark, read_csv, extract_two_hop):
     compare_overlap(cu_coeff, cpu_coeff)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_overlap_multi_column(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_overlap_multi_column(dataset):
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    ).to_pandas()
 
     cu_M = cudf.DataFrame()
     cu_M["src_0"] = cudf.Series(M["0"])

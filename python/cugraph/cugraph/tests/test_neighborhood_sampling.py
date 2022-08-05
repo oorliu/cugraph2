@@ -17,6 +17,10 @@ import cudf
 from cugraph.testing import utils
 from cugraph import uniform_neighbor_sample
 import random
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint,
+                                           netscience, dolphins)
+from pathlib import Path
 
 
 # =============================================================================
@@ -30,12 +34,13 @@ def setup_function():
 # Pytest fixtures
 # =============================================================================
 IS_DIRECTED = [True, False]
-
-datasets = utils.DATASETS_UNDIRECTED + \
-    [utils.RAPIDS_DATASET_ROOT_DIR_PATH/"email-Eu-core.csv"]
+DATASETS_PATH = Path(__file__).parents[4] / "datasets"
+TEST_GROUP = [karate_disjoint, netscience, dolphins]
+email = DATASETS_PATH / "email-Eu-core.csv"
+set_download_dir(DATASETS_PATH)
 
 fixture_params = utils.genFixtureParamsProduct(
-    (datasets, "graph_file"),
+    (TEST_GROUP, "graph_file"),
     (IS_DIRECTED, "directed"),
     ([False, True], "with_replacement"),
     (["int32", "float32"], "indices_type")

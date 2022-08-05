@@ -17,7 +17,10 @@ import time
 import pytest
 
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_asymmetric,
+                                           karate, dolphins)
+from pathlib import Path
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -40,6 +43,8 @@ except ModuleNotFoundError:
 
 print("Networkx version : {} ".format(nx.__version__))
 
+TEST_GROUP = [karate, dolphins]
+set_download_dir(Path(__file__).parents[4] / "datasets")
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -80,11 +85,13 @@ def networkx_call(M):
     return parts
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_louvain_with_edgevals(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_louvain_with_edgevals(dataset):
 
-    M = utils.read_csv_for_nx(graph_file)
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
+    M = cu_M.to_pandas()
     cu_parts, cu_mod = cugraph_call(cu_M, edgevals=True)
 
     nx_parts = networkx_call(M)
@@ -107,11 +114,13 @@ def test_louvain_with_edgevals(graph_file):
     assert abs(cu_mod - cu_mod_nx) < 0.0001
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS_UNDIRECTED)
-def test_louvain(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_louvain(dataset):
 
-    M = utils.read_csv_for_nx(graph_file)
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': '2'}
+    )
+    M = cu_M.to_pandas()
     cu_parts, cu_mod = cugraph_call(cu_M)
     nx_parts = networkx_call(M)
 
@@ -135,10 +144,7 @@ def test_louvain(graph_file):
 
 
 def test_louvain_directed_graph():
-    input_data_path = (utils.RAPIDS_DATASET_ROOT_DIR_PATH /
-                       "karate-asymmetric.csv").as_posix()
-
-    cu_M = utils.read_csv_file(input_data_path)
+    cu_M = karate_asymmetric.get_edgelist()
 
     with pytest.raises(ValueError):
         cu_parts, cu_mod = cugraph_call(cu_M, directed=True)

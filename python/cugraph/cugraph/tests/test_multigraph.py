@@ -18,8 +18,14 @@ import networkx as nx
 import numpy as np
 
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint,
+                                           netscience, dolphins)
+from pathlib import Path
 
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, netscience, dolphins]
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -28,16 +34,17 @@ def setup_function():
     gc.collect()
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_multigraph(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_multigraph(dataset):
     # FIXME: Migrate to new test fixtures for Graph setup once available
-    cuM = utils.read_csv_file(graph_file)
+    cuM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     G = cugraph.MultiDiGraph()
-    G.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="weight")
 
-    nxM = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
     Gnx = nx.from_pandas_edgelist(
-        nxM,
+        cuM.to_pandas(),
         source="0",
         target="1",
         edge_attr="weight",
@@ -61,15 +68,16 @@ def test_multigraph(graph_file):
     assert nxedges.equals(cuedges[["source", "target", "weight"]])
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_Graph_from_MultiGraph(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_Graph_from_MultiGraph(dataset):
     # FIXME: Migrate to new test fixtures for Graph setup once available
-    cuM = utils.read_csv_file(graph_file)
+    cuM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     GM = cugraph.MultiGraph()
-    GM.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="2")
-    nxM = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+    GM.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="weight")
     GnxM = nx.from_pandas_edgelist(
-        nxM,
+        cuM.to_pandas(),
         source="0",
         target="1",
         edge_attr="weight",
@@ -81,9 +89,9 @@ def test_Graph_from_MultiGraph(graph_file):
     assert Gnx.number_of_edges() == G.number_of_edges()
 
     GdM = cugraph.MultiDiGraph()
-    GdM.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="2")
+    GdM.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="weight")
     GnxdM = nx.from_pandas_edgelist(
-        nxM,
+        cuM.to_pandas(),
         source="0",
         target="1",
         edge_attr="weight",
@@ -94,18 +102,19 @@ def test_Graph_from_MultiGraph(graph_file):
     assert Gnxd.number_of_edges() == Gd.number_of_edges()
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_multigraph_sssp(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_multigraph_sssp(dataset):
     # FIXME: Migrate to new test fixtures for Graph setup once available
-    cuM = utils.read_csv_file(graph_file)
+    cuM = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     G = cugraph.MultiDiGraph()
-    G.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cuM, source="0", destination="1", edge_attr="weight")
     cu_paths = cugraph.sssp(G, 0)
     max_val = np.finfo(cu_paths["distance"].dtype).max
     cu_paths = cu_paths[cu_paths["distance"] != max_val]
-    nxM = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
     Gnx = nx.from_pandas_edgelist(
-        nxM,
+        cuM.to_pandas(),
         source="0",
         target="1",
         edge_attr="weight",

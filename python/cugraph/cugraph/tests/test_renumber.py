@@ -21,7 +21,14 @@ import cudf
 from cudf.testing import assert_series_equal
 
 from cugraph.structure.number_map import NumberMap
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience)
+from pathlib import Path
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 
 def test_renumber_ips():
@@ -195,11 +202,13 @@ def test_renumber_negative_col():
     )
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_renumber_files(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_renumber_files(dataset):
     gc.collect()
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={"src": "0", "dst": "1", "wgt": "weight"}
+    ).to_pandas()
     sources = cudf.Series(M["0"])
     destinations = cudf.Series(M["1"])
 
@@ -233,11 +242,13 @@ def test_renumber_files(graph_file):
                         check_names=False)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_renumber_files_col(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_renumber_files_col(dataset):
     gc.collect()
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={"src": "0", "dst": "1", "wgt": "weight"}
+    ).to_pandas()
     sources = cudf.Series(M["0"])
     destinations = cudf.Series(M["1"])
 
@@ -271,11 +282,13 @@ def test_renumber_files_col(graph_file):
                         check_names=False)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_renumber_files_multi_col(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_renumber_files_multi_col(dataset):
     gc.collect()
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={"src": "0", "dst": "1", "wgt": "weight"}
+    ).to_pandas()
     sources = cudf.Series(M["0"])
     destinations = cudf.Series(M["1"])
 

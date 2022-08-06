@@ -19,7 +19,15 @@ import random
 import cudf
 import cugraph
 from cugraph.testing import utils
+from pathlib import Path
 from cugraph.experimental import triangle_count as experimental_triangles
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience, karate)
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -44,10 +52,10 @@ def setup_function():
 # =============================================================================
 # Pytest fixtures
 # =============================================================================
-datasets = utils.DATASETS_UNDIRECTED
+datasets = [karate, dolphins]
 # FIXME: The `start_list` parameter is not supported yet therefore it has been
 # disabled in these tests. Enable it once it is supported
-fixture_params = utils.genFixtureParamsProduct((datasets, "graph_file"),
+fixture_params = utils.genFixtureParamsProduct((datasets, "dataset"),
                                                ([True, False], "edgevals"),
                                                ([False], "start_list"),
                                                )

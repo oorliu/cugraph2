@@ -18,7 +18,11 @@ import cudf
 from cudf.testing import assert_series_equal
 
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate, dolphins,
+                                           netscience)
+from pathlib import Path
+
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
 # (Using or importing the ABCs from 'collections' instead of from
@@ -34,6 +38,8 @@ with warnings.catch_warnings():
 
 print("Networkx version : {} ".format(nx.__version__))
 
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate, dolphins]
 
 # =============================================================================
 # Pytest Setup / Teardown - called for each test function
@@ -77,7 +83,7 @@ def compare_sorensen_two_hop(G, Gnx):
 def cugraph_call(benchamrk_callable, cu_M, edgevals=False):
     G = cugraph.Graph()
     if edgevals is True:
-        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+        G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="weight")
     else:
         G.from_cudf_edgelist(cu_M, source="0", destination="1")
 
@@ -133,13 +139,15 @@ def networkx_call(M, benchmark_callable=None):
 # =============================================================================
 # Pytest Fixtures
 # =============================================================================
-@pytest.fixture(scope="module", params=utils.DATASETS_UNDIRECTED)
+@pytest.fixture(scope="module", params=TEST_GROUP)
 def read_csv(request):
     """
     Read csv file for both networkx and cugraph
     """
-    M = utils.read_csv_for_nx(request.param)
-    cu_M = utils.read_csv_file(request.param)
+    cu_M = request.param.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
+    M = cu_M.to_pandas()
 
     return M, cu_M
 
@@ -169,14 +177,13 @@ def test_nx_sorensen_time(gpubenchmark, read_csv):
     nx_src, nx_dst, nx_coeff = networkx_call(M, gpubenchmark)
 
 
-@pytest.mark.parametrize(
-    "graph_file",
-    [utils.RAPIDS_DATASET_ROOT_DIR_PATH/"netscience.csv"]
-)
-def test_sorensen_edgevals(gpubenchmark, graph_file):
+@pytest.mark.parametrize("dataset", [netscience])
+def test_sorensen_edgevals(dataset, gpubenchmark):
 
-    M = utils.read_csv_for_nx(graph_file)
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
+    M = cu_M.to_pandas()
     cu_src, cu_dst, cu_coeff = cugraph_call(gpubenchmark, cu_M, edgevals=True)
     nx_src, nx_dst, nx_coeff = networkx_call(M)
 
@@ -214,7 +221,7 @@ def test_sorensen_two_hop_edge_vals(read_csv):
         M, source="0", target="1", edge_attr="weight", create_using=nx.Graph()
     )
     G = cugraph.Graph()
-    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="2")
+    G.from_cudf_edgelist(cu_M, source="0", destination="1", edge_attr="weight")
 
     compare_sorensen_two_hop(G, Gnx)
 

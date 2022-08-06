@@ -16,9 +16,16 @@ import gc
 import pytest
 
 import pandas as pd
+from pathlib import Path
 import cudf
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience)
+
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 
 def test_version():
@@ -148,11 +155,13 @@ def compare(src1, dst1, val1, src2, dst2, val2):
 
 
 @pytest.mark.skip("debugging")
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_symmetrize_unweighted(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_symmetrize_unweighted(dataset):
     gc.collect()
 
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
 
     sym_sources, sym_destinations = cugraph.symmetrize(cu_M["0"], cu_M["1"])
 
@@ -171,11 +180,13 @@ def test_symmetrize_unweighted(graph_file):
 
 
 @pytest.mark.skip("debugging")
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_symmetrize_weighted(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_symmetrize_weighted(dataset):
     gc.collect()
 
-    cu_M = utils.read_csv_file(graph_file)
+    cu_M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
 
     sym_src, sym_dst, sym_w = cugraph.symmetrize(
         cu_M["0"], cu_M["1"], cu_M["2"]

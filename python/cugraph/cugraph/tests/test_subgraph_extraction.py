@@ -16,11 +16,17 @@ import gc
 import numpy as np
 import pytest
 import networkx as nx
+from pathlib import Path
 
 import cudf
 import cugraph
-from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience, karate)
 
+
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
 
 ###############################################################################
 # pytest setup - called for each test function
@@ -68,9 +74,11 @@ def nx_call(M, verts, directed=True):
 
 
 ###############################################################################
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_subgraph_extraction_DiGraph(graph_file):
-    M = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_subgraph_extraction_DiGraph(dataset):
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     verts = np.zeros(3, dtype=np.int32)
     verts[0] = 0
     verts[1] = 1
@@ -80,9 +88,11 @@ def test_subgraph_extraction_DiGraph(graph_file):
     assert compare_edges(cu_sg, nx_sg)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_subgraph_extraction_Graph(graph_file):
-    M = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_subgraph_extraction_Graph(dataset):
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     verts = np.zeros(3, dtype=np.int32)
     verts[0] = 0
     verts[1] = 1
@@ -92,15 +102,17 @@ def test_subgraph_extraction_Graph(graph_file):
     assert compare_edges(cu_sg, nx_sg)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_subgraph_extraction_Graph_nx(graph_file):
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_subgraph_extraction_Graph_nx(dataset):
     directed = False
     verts = np.zeros(3, dtype=np.int32)
     verts[0] = 0
     verts[1] = 1
     verts[2] = 17
 
-    M = utils.read_csv_for_nx(graph_file)
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
 
     if directed:
         G = nx.from_pandas_edgelist(
@@ -120,9 +132,11 @@ def test_subgraph_extraction_Graph_nx(graph_file):
         assert nx_sub.has_edge(u, v)
 
 
-@pytest.mark.parametrize("graph_file", utils.DATASETS)
-def test_subgraph_extraction_multi_column(graph_file):
-    M = utils.read_csv_for_nx(graph_file)
+@pytest.mark.parametrize("dataset", TEST_GROUP)
+def test_subgraph_extraction_multi_column(dataset):
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
 
     cu_M = cudf.DataFrame()
     cu_M["src_0"] = cudf.Series(M["0"])
@@ -160,9 +174,9 @@ def test_subgraph_extraction_graph_not_renumbered():
     """
     Ensure subgraph() works with a Graph that has not been renumbered
     """
-    graph_file = utils.RAPIDS_DATASET_ROOT_DIR_PATH / "karate.csv"
-    gdf = cudf.read_csv(graph_file, delimiter=" ",
-                        dtype=["int32", "int32", "float32"], header=None)
+    gdf = karate.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    )
     verts = np.array([0, 1, 2], dtype=np.int32)
     sverts = cudf.Series(verts)
     G = cugraph.Graph()

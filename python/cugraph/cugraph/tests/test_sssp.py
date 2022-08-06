@@ -28,6 +28,10 @@ from scipy.sparse import csc_matrix as sp_csc_matrix
 import cudf
 import cugraph
 from cugraph.testing import utils
+from cugraph.experimental.datasets import (set_download_dir,
+                                           karate_disjoint, dolphins,
+                                           netscience)
+from pathlib import Path
 
 
 # Temporarily suppress warnings till networkX fixes deprecation warnings
@@ -43,6 +47,12 @@ with warnings.catch_warnings():
 
 print("Networkx version : {} ".format(nx.__version__))
 
+set_download_dir(Path(__file__).parents[4] / "datasets")
+TEST_GROUP = [karate_disjoint, dolphins, netscience]
+CUGRAPH_DIR_INPUT_TYPES = pytest.param(
+        cugraph.Graph(directed=True), marks=pytest.mark.cugraph_types,
+        id="cugraph.Graph(directed=True)"
+    )
 
 # Map of cuGraph input types to the expected output type for cuGraph
 # connected_components calls.
@@ -134,8 +144,10 @@ def cugraph_call(gpu_benchmark_callable, input_G_or_matrix,
     return result_dict, max_val
 
 
-def networkx_call(graph_file, source, edgevals=False):
-    M = utils.read_csv_for_nx(graph_file, read_weights_in_sp=True)
+def networkx_call(dataset, source, edgevals=False):
+    M = dataset.get_edgelist().rename(
+        columns={'src': '0', 'dst': '1', 'wgt': 'weight'}
+    ).to_pandas()
     # Directed NetworkX graph
     edge_attr = "weight" if edgevals else None
     Gnx = nx.from_pandas_edgelist(
@@ -156,7 +168,7 @@ def networkx_call(graph_file, source, edgevals=False):
     t2 = time.time() - t1
     print("NX Time : " + str(t2))
 
-    return (graph_file, source, nx_paths, Gnx)
+    return (dataset, source, nx_paths, Gnx)
 
 
 # =============================================================================
@@ -168,7 +180,7 @@ def networkx_call(graph_file, source, edgevals=False):
 # not do this automatically (unlike multiply-parameterized tests). The 2nd
 # item in the tuple is a label for the param value used when displaying the
 # full test name.
-DATASETS = [pytest.param(d) for d in utils.DATASETS]
+DATASETS = [pytest.param(d) for d in TEST_GROUP]
 SOURCES = [pytest.param(1)]
 fixture_params = utils.genFixtureParamsProduct((DATASETS, "ds"),
                                                (SOURCES, "src"))
@@ -203,7 +215,7 @@ def single_dataset_source_nxresults_weighted(request):
 # =============================================================================
 # Tests
 # =============================================================================
-@pytest.mark.parametrize("cugraph_input_type", utils.CUGRAPH_DIR_INPUT_TYPES)
+@pytest.mark.parametrize("cugraph_input_type", CUGRAPH_DIR_INPUT_TYPES)
 def test_sssp(gpubenchmark, dataset_source_nxresults, cugraph_input_type):
     # Extract the params generated from the fixture
     (graph_file, source, nx_paths, Gnx) = dataset_source_nxresults
